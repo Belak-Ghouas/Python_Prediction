@@ -10,6 +10,8 @@ import math
 import numpy as np
 from sklearn.model_selection import KFold
 
+from sklearn.svm import SVC
+
 
 def split_lines(input, seed, output1, output2):
     """Distributes the lines of 'input' to 'output1' and 'output2' pseudo-randomly.
@@ -99,6 +101,23 @@ split_lines("wdbc.data",50,"train","test")
 train_x , train_y =read_data("train")
 test_x , test_y =read_data("test")
 
+def eval_cancer_untrained_classifier(test_x, test_y, X_train, y_train, classifier):
+    predict_y = []
+    correct = 0
+    wrong = 0
+
+    length = len(test_y)
+
+    for x in test_x:
+        predict_y.append(classifier(X_train, y_train ,x))
+
+    for i in range(length):
+        if(predict_y[i] != test_y[i]):
+            wrong += 1
+
+    return ((float(wrong)/float(length)))
+
+
 def cross_validation(train_x, train_y, untrained_classifier):
 
     X = np.array(train_x)
@@ -106,7 +125,67 @@ def cross_validation(train_x, train_y, untrained_classifier):
     kf = KFold(n_splits=5)
     listeTrainx=[]
     listeTrainY=[]
+    score=[]
+    result=[]
+    success=0
+    error=0
+    length=0
 
-    for train_X , train_Y  in kf.split(X,Y):
-        listeTrainx.append(train_X)
-        listeTrainY.append(train_Y)
+    for train_index, test_index  in kf.split(X):
+        X_train, X_test, y_train, y_test = X[train_index], X[test_index], Y[train_index], Y[test_index]
+        length=len(X_test)
+        for x in X_test:
+            result.append(untrained_classifier(  X_train,  y_train, x))
+        for i in range (length):
+            if result[i]==y_test[i]:
+                success+=1
+            else:
+                error+=1
+        score.append((float(error)/float(length)))
+        length=0
+        result=[]
+        success=0
+        error=0
+
+    return(sum(score)/5)
+        
+
+#print( cross_validation(train_x,train_y, lambda train_x, train_y, x: is_cancerous_knn(x, train_x, train_y, dist_function=simple_distance, k=7)))
+
+def sampled_range(mini, maxi, num):
+    if not num:
+         return []
+    lmini = math.log(mini)
+    lmaxi = math.log(maxi)
+    ldelta = (lmaxi - lmini) / (num - 1)
+    out = [x for x in set([int(math.exp(lmini + i * ldelta)) for i in range(num)])]
+    out.sort()
+    return out
+
+def find_best_k(train_x, train_y, untrained_classifier_for_k):
+    k_list = sampled_range(3, 50, 10)
+    best_score = 1
+    best_k = 0
+
+    for k in k_list:
+        score = cross_validation(train_x, train_y, lambda train_x, train_y, x: is_cancerous_knn(x, train_x,train_y, dist_function=simple_distance, k=k))
+        if score < best_score:
+            best_score = score
+            best_k = k
+
+    return best_k
+#print(find_best_k(train_x, train_y, None))   #k=7   64% erreur
+
+
+def svm_classify(train_x, train_y, X):
+
+    clf = SVC(C=find_best_k(train_x, train_y, None), gamma='auto')
+
+    x = np.array(train_x)
+    y = np.array(train_y)
+    clf.fit(x, y)
+
+    return clf.predict(X)
+
+#X = np.array(test_x)
+#print(svm_classify(train_x, train_y, X)) 
